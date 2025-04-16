@@ -1,4 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::{
+    io::Read,
+    net::{Ipv4Addr, SocketAddrV4, TcpListener},
+};
 
 use clap::Parser as _;
 use peer_node::cli::Args;
@@ -14,10 +17,12 @@ async fn main() -> Result<(), std::io::Error> {
     tracing::info!("Node address: {}", address);
     tracing::info!("A {}", args.role);
 
-    for _incoming_stream in listerner.incoming().flatten() {
-        // incoming_stream
-    }
+    loop {
+        for mut incoming_stream in listerner.incoming().flatten() {
+            let mut msg = [0; 16];
+            let _byte_count = incoming_stream.read(&mut msg)?;
 
-    // loop {}
-    Ok(())
+            tracing::info!("Message received: {:?}", msg);
+        }
+    }
 }

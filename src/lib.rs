@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod comms;
 
 pub mod tracing {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _};
