@@ -13,6 +13,10 @@ pub struct Args {
     /// Node's role
     #[arg(short, long, default_value_t = Role::Sender)]
     pub role: Role,
+
+    /// Node's address
+    #[arg(short, long, default_value_t = String::from("127.0.0.1:8000"))]
+    pub address: String,
 }
 
 #[derive(Clone, Debug, ValueEnum)]

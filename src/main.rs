@@ -1,10 +1,13 @@
 use std::{
-    io::Read,
-    net::{Ipv4Addr, SocketAddrV4, TcpListener},
+    io::{self, Read, Write as _},
+    net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
 };
 
 use clap::Parser as _;
-use peer_node::cli::Args;
+use peer_node::{
+    cli::{Args, Role},
+    comms::message::Message,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
@@ -17,12 +20,35 @@ async fn main() -> Result<(), std::io::Error> {
     tracing::info!("Node address: {}", address);
     tracing::info!("A {}", args.role);
 
-    loop {
-        for mut incoming_stream in listerner.incoming().flatten() {
-            let mut msg = [0; 16];
-            let _byte_count = incoming_stream.read(&mut msg)?;
+    match args.role {
+        Role::Receiver => loop {
+            for mut incoming_stream in listerner.incoming().flatten() {
+                let mut msg = [0; 5];
+                let _byte_count = incoming_stream.read(&mut msg)?;
 
-            tracing::info!("Message received: {:?}", msg);
+                let msg: Message = String::from_utf8_lossy(&msg).trim().to_string().into();
+
+                // If it's a rememberMe, store to some DHT and if Comms: Act as instructed
+
+                tracing::info!("Message received: {msg:?}");
+            }
+        },
+        Role::Sender => {
+            let mut msg = String::new();
+            io::stdin().read_line(&mut msg)?;
+
+            tracing::info!("Sending: {msg}");
+
+            let mut outgoing_stream = TcpStream::connect(args.address)?;
+
+            let msg: Message = msg.into();
+
+            outgoing_stream.write_all(msg.to_string().as_bytes())?;
+
+            // Wait for the message to be sent before exiting
+            outgoing_stream.flush()?;
+
+            Ok(())
         }
     }
 }
