@@ -1,61 +1,92 @@
-use std::{
-    io::{self, Read, Write as _},
-    net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
-};
+use std::{error::Error, io, net::Ipv4Addr, time::Duration};
 
 use clap::Parser as _;
-use libp2p::{Multiaddr, multiaddr::Protocol};
+use libp2p::{
+    Multiaddr, futures::StreamExt, multiaddr::Protocol, noise, ping, swarm::SwarmEvent, tcp, yamux,
+};
 use peer_node::{
     cli::{Args, Role},
     comms::message::Message,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> Result<(), Box<dyn Error>> {
     peer_node::tracing::init("info");
     let args = Args::parse();
 
     let ip_addr = Ipv4Addr::new(127, 0, 0, 1);
 
-    let address = SocketAddrV4::new(ip_addr, args.port);
-
     let peer_multi_addr = Multiaddr::from(ip_addr).with(Protocol::Tcp(args.port));
 
     tracing::info!("Peer addr: {peer_multi_addr}");
-
-    let listerner = TcpListener::bind(address)?;
-
-    tracing::info!("Node address: {}", address);
     tracing::info!("A {}", args.role);
 
-    match args.role {
-        Role::Receiver => loop {
-            for mut incoming_stream in listerner.incoming().flatten() {
-                let mut msg = [0; 5];
-                let _byte_count = incoming_stream.read(&mut msg)?;
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|_behaviour| ping::Behaviour::default())?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+        .build();
 
-                let msg: Message = String::from_utf8_lossy(&msg).trim().to_string().into();
+    swarm.listen_on(peer_multi_addr)?;
 
-                // If it's a rememberMe, store to some DHT and if Comms: Act as instructed
-
-                tracing::info!("Message received: {msg:?}");
+    match swarm.next().await {
+        Some(event) => {
+            tracing::info!("Event: {event:?}");
+            match event {
+                SwarmEvent::NewListenAddr {
+                    listener_id,
+                    address,
+                } => {
+                    tracing::info!("Listening with listener {listener_id} on {address}");
+                }
+                SwarmEvent::ListenerClosed {
+                    listener_id,
+                    addresses,
+                    reason,
+                } => {
+                    tracing::info!(
+                        "Listener with listener {listener_id} closed for listening to  {addresses:?}, reason: {reason:?}"
+                    );
+                }
+                SwarmEvent::IncomingConnection {
+                    connection_id,
+                    local_addr,
+                    send_back_addr,
+                } => {
+                    tracing::info!(
+                        "Incoming connection {connection_id} from {local_addr} to {send_back_addr}"
+                    );
+                }
+                _ => {}
             }
-        },
+        }
+        None => {}
+    }
+
+    match args.role {
+        Role::Receiver => todo!(),
+        // loop {
+        // let mut msg = [0; 5];
+        // let _byte_count = incoming_stream.read(&mut msg)?;
+
+        // let msg: Message = String::from_utf8_lossy(&msg).trim().to_string().into();
+
+        // If it's a rememberMe, store to some DHT and if Comms: Act as instructed
+
+        // tracing::info!("Message received: {msg:?}");
+        // },
         Role::Sender => {
             let mut msg = String::new();
             io::stdin().read_line(&mut msg)?;
 
             tracing::info!("Sending: {msg}");
 
-            let mut outgoing_stream = TcpStream::connect(args.address)?;
-
-            let msg: Message = msg.into();
-
-            outgoing_stream.write_all(msg.to_string().as_bytes())?;
-
-            // Wait for the message to be sent before exiting
-            outgoing_stream.flush()?;
-
+            let _msg: Message = msg.into();
             Ok(())
         }
     }

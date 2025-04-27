@@ -7,7 +7,13 @@ edition = "2024"
 tokio = { version = "1.21.0", features = ["macros", "rt-multi-thread"] }
 
 # P2P
-libp2p = "0.55.0"
+libp2p = { version = "0.55.0", features = [
+    "noise",
+    "ping",
+    "tcp",
+    "tokio",
+    "yamux",
+] }
 
 # Serde
 serde = { version = "^1", features = ["derive"] }
