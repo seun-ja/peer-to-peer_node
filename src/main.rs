@@ -4,6 +4,7 @@ use std::{
 };
 
 use clap::Parser as _;
+use libp2p::{Multiaddr, multiaddr::Protocol};
 use peer_node::{
     cli::{Args, Role},
     comms::message::Message,
@@ -14,7 +15,14 @@ async fn main() -> Result<(), std::io::Error> {
     peer_node::tracing::init("info");
     let args = Args::parse();
 
-    let address = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), args.port);
+    let ip_addr = Ipv4Addr::new(127, 0, 0, 1);
+
+    let address = SocketAddrV4::new(ip_addr, args.port);
+
+    let peer_multi_addr = Multiaddr::from(ip_addr).with(Protocol::Tcp(args.port));
+
+    tracing::info!("Peer addr: {peer_multi_addr}");
+
     let listerner = TcpListener::bind(address)?;
 
     tracing::info!("Node address: {}", address);
