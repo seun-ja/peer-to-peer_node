@@ -13,6 +13,7 @@ libp2p = { version = "0.55.0", features = [
     "tcp",
     "tokio",
     "yamux",
+    "quic",
 ] }
 
 # Serde
