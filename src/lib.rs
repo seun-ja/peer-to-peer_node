@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 pub mod cli;
 pub mod comms;
 pub mod storage;
@@ -15,3 +17,20 @@ pub mod tracing {
             .expect("Failed to set global default subscriber");
     }
 }
+
+pub mod behavior {
+    use libp2p::swarm::NetworkBehaviour;
+    use libp2p::{gossipsub, kad};
+
+    #[derive(NetworkBehaviour)]
+    pub struct PeerBehavior {
+        // request_response: request_response::cbor::Behaviour<PeerRequest, PeerResponse>,
+        pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
+        pub gossipsub: gossipsub::Behaviour,
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PeerRequest {}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PeerResponse {}
