@@ -13,6 +13,10 @@ pub struct Args {
     /// Peer's address
     #[arg(short)]
     pub peer_address: Option<String>,
+
+    /// Bootstrap Nodes
+    #[arg(short)]
+    pub bootstrap: Option<String>,
 }
 
 #[derive(Clone, Debug, ValueEnum)]

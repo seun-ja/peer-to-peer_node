@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub enum Message {
     RememeberMe,
     Comms(String),
