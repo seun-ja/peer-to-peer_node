@@ -3,5 +3,5 @@
 # Tasks
 
 - [ ] Consensus Algorithm
-- [ ] Networking
+- [x] Networking
 - [ ] Temp Storage
