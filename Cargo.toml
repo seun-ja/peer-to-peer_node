@@ -4,7 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "1.21.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.21.0", features = ["full"] }
+
+# P2P
+libp2p = { version = "0.55.0", features = [
+    "noise",
+    "tcp",
+    "tokio",
+    "yamux",
+    "quic",
+    "request-response",
+    "cbor",
+    "gossipsub",
+    "kad",
+] }
 
 # Serde
 serde = { version = "^1", features = ["derive"] }

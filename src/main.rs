@@ -1,54 +1,69 @@
-use std::{
-    io::{self, Read, Write as _},
-    net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
-};
+use std::{error::Error, net::Ipv4Addr, time::Duration};
 
 use clap::Parser as _;
+use libp2p::{
+    Multiaddr,
+    gossipsub::{self, AllowAllSubscriptionFilter, Config, IdentityTransform, MessageAuthenticity},
+    kad::{self, store::MemoryStore},
+    multiaddr::Protocol,
+    noise, tcp, yamux,
+};
 use peer_node::{
-    cli::{Args, Role},
-    comms::message::Message,
+    cli::Args,
+    network::{
+        behaviour::PeerBehavior,
+        event::{Topic, event_runner},
+    },
 };
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> Result<(), Box<dyn Error>> {
     peer_node::tracing::init("info");
     let args = Args::parse();
 
-    let address = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), args.port);
-    let listerner = TcpListener::bind(address)?;
+    let ip_addr = Ipv4Addr::new(0, 0, 0, 0);
 
-    tracing::info!("Node address: {}", address);
+    let peer_multi_addr = Multiaddr::from(ip_addr).with(Protocol::Tcp(0));
+
     tracing::info!("A {}", args.role);
 
-    match args.role {
-        Role::Receiver => loop {
-            for mut incoming_stream in listerner.incoming().flatten() {
-                let mut msg = [0; 5];
-                let _byte_count = incoming_stream.read(&mut msg)?;
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|keypair| {
+            let peer_id = keypair.public().to_peer_id();
+            let store = MemoryStore::new(peer_id);
+            let kademlia = kad::Behaviour::new(peer_id, store);
 
-                let msg: Message = String::from_utf8_lossy(&msg).trim().to_string().into();
+            let gossipsub: gossipsub::Behaviour<IdentityTransform, AllowAllSubscriptionFilter> =
+                gossipsub::Behaviour::new(
+                    MessageAuthenticity::Signed(keypair.clone()),
+                    Config::default(),
+                )
+                .expect("Gossipsub initiation fails");
 
-                // If it's a rememberMe, store to some DHT and if Comms: Act as instructed
-
-                tracing::info!("Message received: {msg:?}");
+            PeerBehavior {
+                kademlia,
+                gossipsub,
             }
-        },
-        Role::Sender => {
-            let mut msg = String::new();
-            io::stdin().read_line(&mut msg)?;
+        })?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+        .build();
 
-            tracing::info!("Sending: {msg}");
+    let topic = gossipsub::IdentTopic::new("peer-network");
+    swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
 
-            let mut outgoing_stream = TcpStream::connect(args.address)?;
+    swarm.listen_on(peer_multi_addr)?;
 
-            let msg: Message = msg.into();
-
-            outgoing_stream.write_all(msg.to_string().as_bytes())?;
-
-            // Wait for the message to be sent before exiting
-            outgoing_stream.flush()?;
-
-            Ok(())
-        }
-    }
+    event_runner(
+        swarm,
+        args.role,
+        args.peer_address,
+        Topic(topic.to_string()),
+    )
+    .await
 }
