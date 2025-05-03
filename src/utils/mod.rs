@@ -1,3 +1,5 @@
+pub mod error;
+
 use std::time::{Duration, SystemTime};
 
 pub type UnixTimestamp = i64;

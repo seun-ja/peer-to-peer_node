@@ -9,6 +9,13 @@ use crate::utils::UnixTimestamp;
 pub type TransactionHash = String;
 pub type BlockHash = String;
 
+/// Represents a block.
+pub struct Block {
+    pub header: BlockHeader,
+    pub transactions: Vec<Transaction>,
+}
+
+/// Represents the header of a block.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub previous_block_hash: BlockHash,
@@ -17,6 +24,7 @@ pub struct BlockHeader {
     pub transaction_hash: TransactionHash,
 }
 
+/// Represents a transaction.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transaction {
     _signature: Option<String>,
@@ -25,12 +33,14 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    /// Hashes the transaction in sha256 digest
     fn _to_hash(&self) -> Result<String, TransactionError> {
         serde_json::to_string(&self)
             .map_err(TransactionError::UnableToSerializeTransaction)
             .map(digest)
     }
 
+    /// Encodes the transaction in hex format
     pub fn to_hex(&self) -> Result<String, TransactionError> {
         serde_json::to_string(&self)
             .map_err(TransactionError::UnableToDeserializeTransaction)
@@ -38,6 +48,7 @@ impl Transaction {
     }
 }
 
+/// Transaction data. Ideally contains payload that's `Transactable`
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TransactionData {
     _transaction_id: String,
@@ -52,11 +63,7 @@ trait Transactable: Debug + Send + Sync + DynClone {
     fn _submit(&self) -> Result<(), TransactionError>;
 }
 
-impl Clone for Box<dyn Transactable> {
-    fn clone(&self) -> Self {
-        dyn_clone::clone_box(&**self)
-    }
-}
+dyn_clone::clone_trait_object!(Transactable);
 
 #[derive(thiserror::Error, Debug)]
 pub enum TransactionError {

@@ -20,6 +20,7 @@ pub async fn event_runner(
     mut swarm: Swarm<PeerBehavior>,
     role: Role,
     peer_address: Option<String>,
+    _bootstrap: Option<String>,
     topic: Topic,
 ) -> Result<(), Box<dyn Error>> {
     match role {

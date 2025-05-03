@@ -10,13 +10,13 @@ pub struct Args {
     #[arg(short, long, default_value_t = Role::Sender)]
     pub role: Role,
 
-    /// Peer's address
+    /// Peer's MultiAddress
     #[arg(short)]
-    pub peer_address: Option<String>,
+    pub peer_mutli_address: Option<String>,
 
     /// Bootstrap Nodes
     #[arg(short)]
-    pub bootstrap: Option<String>,
+    pub bootstrap_peer_id: Option<String>,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
