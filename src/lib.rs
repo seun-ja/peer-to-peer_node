@@ -1,7 +1,9 @@
+pub mod block;
 pub mod cli;
 pub mod comms;
 pub mod network;
 pub mod storage;
+pub mod utils;
 
 pub mod tracing {
     use tracing_subscriber::{
