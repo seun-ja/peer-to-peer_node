@@ -1,8 +1,11 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
+use chrono::Utc;
 use dyn_clone::DynClone;
+use libp2p::identity::{Keypair, SigningError};
 use serde::{Deserialize, Serialize};
 use sha256::digest;
+use uuid::Uuid;
 
 use crate::utils::UnixTimestamp;
 
@@ -27,9 +30,9 @@ pub struct BlockHeader {
 /// Represents a transaction.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transaction {
-    _signature: Option<String>,
-    pub(crate) _timestamp: UnixTimestamp,
-    pub(crate) _transaction: TransactionData,
+    signature: Option<String>,
+    pub(crate) timestamp: UnixTimestamp,
+    pub(crate) transaction: TransactionData,
 }
 
 impl Transaction {
@@ -46,21 +49,36 @@ impl Transaction {
             .map_err(TransactionError::UnableToDeserializeTransaction)
             .map(hex::encode)
     }
+
+    pub fn build<T: Transactable + 'static>(
+        keypair: Keypair,
+        payload: T,
+    ) -> Result<Self, TransactionError> {
+        payload.sign(&keypair)?;
+
+        Ok(Self {
+            signature: None,
+            timestamp: Utc::now().timestamp(),
+            transaction: TransactionData {
+                transaction_id: Uuid::new_v4().to_string(),
+                payload: Box::new(payload),
+            },
+        })
+    }
 }
 
 /// Transaction data. Ideally contains payload that's `Transactable`
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TransactionData {
-    _transaction_id: String,
-    _payload: Box<dyn Transactable>,
+    transaction_id: String,
+    payload: Box<dyn Transactable>,
 }
 
-pub struct BlockMetadata {}
-
 #[typetag::serde(tag = "type")]
-trait Transactable: Debug + Send + Sync + DynClone {
+pub trait Transactable: Debug + Send + Sync + DynClone + Display {
     // TODO: Implement the _submit method to submit the transaction to the network.
     fn _submit(&self) -> Result<(), TransactionError>;
+    fn sign(&self, keypair: &Keypair) -> Result<(), TransactionError>;
 }
 
 dyn_clone::clone_trait_object!(Transactable);
@@ -71,4 +89,6 @@ pub enum TransactionError {
     UnableToSerializeTransaction(serde_json::Error),
     #[error("Unable to deserialize transaction: {0}")]
     UnableToDeserializeTransaction(serde_json::Error),
+    #[error("Unable to sign transaction: {0}")]
+    SigningError(SigningError),
 }

@@ -41,3 +41,6 @@ thiserror = "2.0.12"
 # Tracing
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"] }
+
+# Node db
+# rocksdb = "0.23.0"
