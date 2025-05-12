@@ -21,14 +21,14 @@ pub struct Args {
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Role {
-    Receiver,
+    BootstapNode,
     Sender,
 }
 
 impl Display for Role {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Role::Receiver => write!(f, "Receiver"),
+            Role::BootstapNode => write!(f, "Receiver"),
             Role::Sender => write!(f, "Sender"),
         }
     }

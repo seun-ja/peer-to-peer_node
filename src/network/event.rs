@@ -24,7 +24,7 @@ pub async fn event_runner(
     topic: Topic,
 ) -> Result<(), Box<dyn Error>> {
     match role {
-        Role::Receiver => loop {
+        Role::BootstapNode => loop {
             if let Some(event) = swarm.next().await {
                 match event {
                     SwarmEvent::NewListenAddr {
@@ -124,6 +124,11 @@ pub async fn event_runner(
                             tracing::info!(
                                 "Connection {connection_id} with peer {peer_id} closed, endpoint: {endpoint:?}, num_established: {num_established}, cause: {cause:?}"
                             );
+                        }
+                        SwarmEvent::Behaviour(PeerBehaviorEvent::Kademlia(
+                            kad::Event::InboundRequest { request },
+                        )) => {
+                            tracing::info!("{request:?}")
                         }
                         _ => {}
                     }
