@@ -62,7 +62,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     event_runner(
         swarm,
         args.role,
-        args.peer_address,
+        args.peer_mutli_address,
+        args.bootstrap_peer_id,
         Topic(topic.to_string()),
     )
     .await
