@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use bytes::Bytes;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,12 @@ impl From<String> for Message {
     fn from(s: String) -> Self {
         let s = s.as_str();
         Message::Comms(s.to_owned())
+    }
+}
+
+impl From<Message> for Bytes {
+    fn from(val: Message) -> Self {
+        Bytes::copy_from_slice(val.to_string().as_bytes())
     }
 }
 
