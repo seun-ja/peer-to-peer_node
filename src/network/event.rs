@@ -1,10 +1,9 @@
 use std::error::Error;
 
 use libp2p::{
-    Multiaddr, Swarm,
+    Swarm,
     futures::StreamExt as _,
-    gossipsub::{self, TopicHash},
-    kad,
+    kad::{self, Record, RecordKey},
     swarm::SwarmEvent,
 };
 use tokio::{
@@ -12,36 +11,33 @@ use tokio::{
     select,
 };
 
-use crate::{cli::Role, comms::message::Message};
-
 use super::behaviour::{PeerBehavior, PeerBehaviorEvent};
 
-pub async fn event_runner(
-    mut swarm: Swarm<PeerBehavior>,
-    role: Role,
-    peer_address: Option<String>,
-    _bootstrap: Option<String>,
-    topic: Topic,
-) -> Result<(), Box<dyn Error>> {
-    match role {
-        Role::BootstapNode => loop {
-            if let Some(event) = swarm.next().await {
+pub async fn event_runner(mut swarm: Swarm<PeerBehavior>) -> Result<(), Box<dyn Error>> {
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
+    loop {
+        select! {
+            Ok(Some(line)) = stdin.next_line() => {
+                let mut args = line.split(' ');
+
+                match args.next() {
+                    Some("GET") => {
+                        swarm.behaviour_mut().kademlia.get_record(RecordKey::new(b"key"));
+                    },
+                    Some("RECORD") => {
+                        if let Some(value) = args.next() {
+                            swarm.behaviour_mut().kademlia.put_record(
+                                Record::new("key".as_bytes().to_vec(), value.as_bytes().to_vec()),
+                                kad::Quorum::One,
+                            )?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            Some(event) = swarm.next() =>
                 match event {
-                    SwarmEvent::NewListenAddr {
-                        listener_id,
-                        address,
-                    } => {
-                        tracing::info!("Listening with listener {listener_id} on {address}");
-                    }
-                    SwarmEvent::IncomingConnection {
-                        connection_id,
-                        local_addr,
-                        send_back_addr,
-                    } => {
-                        tracing::info!(
-                            "Incoming connection {connection_id} from {local_addr} to {send_back_addr}"
-                        );
-                    }
                     SwarmEvent::ConnectionClosed {
                         peer_id,
                         connection_id,
@@ -53,96 +49,76 @@ pub async fn event_runner(
                             "Connection {connection_id} with peer {peer_id} closed, endpoint: {endpoint:?}, num_established: {num_established}, cause: {cause:?}"
                         );
                     }
-                    SwarmEvent::Behaviour(PeerBehaviorEvent::Gossipsub(
-                        gossipsub::Event::Message {
-                            propagation_source,
-                            message,
+                    SwarmEvent::Behaviour(PeerBehaviorEvent::Mdns(
+                        libp2p::mdns::Event::Discovered(list),
+                    )) => {
+                        for (peer_id, multi_addr) in list {
+                            swarm
+                                .behaviour_mut()
+                                .kademlia
+                                .add_address(&peer_id, multi_addr);
+                        }
+                    }
+                    SwarmEvent::Behaviour(PeerBehaviorEvent::Kademlia(
+                        kad::Event::OutboundQueryProgressed { result, .. },
+                    )) => {
+                        match result {
+                            kad::QueryResult::GetProviders(Err(err)) => {
+                                eprintln!("Failed to get providers: {err:?}");
+                            }
+                            kad::QueryResult::GetRecord(Ok(
+                                kad::GetRecordOk::FoundRecord(kad::PeerRecord {
+                                    record: kad::Record { key, value, .. },
+                                    ..
+                                })
+                            )) => {
+                                tracing::info!(
+                                    "Got record {:?} {:?}",
+                                    std::str::from_utf8(key.as_ref())?,
+                                    std::str::from_utf8(&value)?, // TODO: #10 `BUG` error handling would break program
+                                );
+                            }
+                            kad::QueryResult::GetRecord(Ok(_)) => {}
+                            kad::QueryResult::GetRecord(Err(err)) => {
+                                tracing::info!("Failed to get record: {err:?}");
+                            }
+                            kad::QueryResult::PutRecord(Ok(kad::PutRecordOk { key })) => {
+                                tracing::info!(
+                                    "Successfully put record {:?}",
+                                    std::str::from_utf8(key.as_ref())?
+                                );
+                            }
+                            kad::QueryResult::PutRecord(Err(err)) => {
+                                tracing::info!("Failed to put record: {err:?}");
+                            }
+                            kad::QueryResult::StartProviding(Ok(kad::AddProviderOk { key })) => {
+                                tracing::info!(
+                                    "Successfully put provider record {:?}",
+                                    std::str::from_utf8(key.as_ref())?
+                                );
+                            }
+                            kad::QueryResult::StartProviding(Err(err)) => {
+                                eprintln!("Failed to put provider record: {err:?}");
+                            }
+                            _ => {}
+                        }
+                    }
+                    SwarmEvent::Behaviour(PeerBehaviorEvent::Kademlia(
+                        kad::Event::RoutingUpdated {
+                            peer,
+                            is_new_peer,
+                            addresses,
+                            old_peer,
                             ..
                         },
                     )) => {
-                        let message: Message =
-                            String::from_utf8_lossy(&message.data).to_string().into();
-
                         tracing::info!(
-                            "Got a message: {message} from PeerId: {propagation_source}",
+                            "Routing updated: with {peer}, is it new? {is_new_peer}. \n {old_peer:?} kicked out"
                         );
-                    }
-                    SwarmEvent::Behaviour(PeerBehaviorEvent::Kademlia(
-                        kad::Event::InboundRequest { request },
-                    )) => {
-                        tracing::info!("{request:?}")
+                        tracing::info!("known address: {addresses:#?}")
                     }
                     _ => {}
                 }
-            }
-        },
-        Role::Sender => {
-            if let Some(addr) = peer_address {
-                let peer_addr: Multiaddr = addr.parse()?;
-                if let Err(err) = swarm.dial(peer_addr) {
-                    tracing::error!("Dialing peer address: {} fails. reason: {}", addr, err);
-                }
-            } else {
-                tracing::warn!("No peer address provided");
-            }
-
-            let mut stdin = io::BufReader::new(io::stdin()).lines();
-            loop {
-                select! {
-                    Ok(Some(line)) = stdin.next_line() => {
-                        if let Err(e) = swarm
-                            .behaviour_mut().gossipsub
-                            .publish(topic.clone(), line.as_bytes()) {
-                            tracing::warn!("Publish error: {e:?}");
-                        }
-                    }
-                    event = swarm.select_next_some() => match event {
-                        SwarmEvent::NewListenAddr { address, .. } => {
-                            tracing::info!("Listening on {address:?}")
-                        }
-                        SwarmEvent::Behaviour(PeerBehaviorEvent::Gossipsub(
-                            gossipsub::Event::Message {
-                                propagation_source,
-                                message,
-                                ..
-                            },
-                        )) => {
-                            let message: Message =
-                                String::from_utf8_lossy(&message.data).to_string().into();
-
-                            tracing::info!(
-                                "Got a message: {message} from PeerId: {propagation_source}",
-                            );
-                        }
-                        SwarmEvent::ConnectionClosed {
-                            peer_id,
-                            connection_id,
-                            endpoint,
-                            num_established,
-                            cause,
-                        } => {
-                            tracing::info!(
-                                "Connection {connection_id} with peer {peer_id} closed, endpoint: {endpoint:?}, num_established: {num_established}, cause: {cause:?}"
-                            );
-                        }
-                        SwarmEvent::Behaviour(PeerBehaviorEvent::Kademlia(
-                            kad::Event::InboundRequest { request },
-                        )) => {
-                            tracing::info!("{request:?}")
-                        }
-                        _ => {}
-                    }
-                }
-            }
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct Topic(pub String);
-
-impl From<Topic> for TopicHash {
-    fn from(val: Topic) -> Self {
-        TopicHash::from_raw(&val.0)
     }
 }

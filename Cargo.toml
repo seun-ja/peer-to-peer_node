@@ -15,8 +15,8 @@ libp2p = { version = "0.55.0", features = [
     "quic",
     "request-response",
     "cbor",
-    "gossipsub",
     "kad",
+    "mdns",
 ] }
 
 # Serde
