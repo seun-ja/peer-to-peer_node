@@ -15,8 +15,8 @@ libp2p = { version = "0.55.0", features = [
     "quic",
     "request-response",
     "cbor",
-    "gossipsub",
     "kad",
+    "mdns",
 ] }
 
 # Serde
@@ -29,7 +29,6 @@ hex = "0.4.3"
 sha256 = "1.5.0"
 
 # Utils
-bytes = "1.10.1"
 chrono = "0.4.40"
 clap = { version = "4.5.28", features = ["derive"] }
 clap_derive = "4.5.32"

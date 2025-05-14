@@ -3,17 +3,14 @@ use std::{error::Error, net::Ipv4Addr, time::Duration};
 use clap::Parser as _;
 use libp2p::{
     Multiaddr, PeerId,
-    gossipsub::{self, AllowAllSubscriptionFilter, Config, IdentityTransform, MessageAuthenticity},
-    kad::{self, store::MemoryStore},
+    kad::{self, Mode, store::MemoryStore},
+    mdns,
     multiaddr::Protocol,
     noise, tcp, yamux,
 };
 use peer_node::{
     cli::Args,
-    network::{
-        behaviour::PeerBehavior,
-        event::{Topic, event_runner},
-    },
+    network::{behaviour::PeerBehavior, event::event_runner},
 };
 
 #[tokio::main]
@@ -39,46 +36,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let store: MemoryStore = MemoryStore::new(peer_id);
             let kademlia: kad::Behaviour<MemoryStore> = kad::Behaviour::new(peer_id, store);
 
-            let gossipsub: gossipsub::Behaviour<IdentityTransform, AllowAllSubscriptionFilter> =
-                gossipsub::Behaviour::new(
-                    MessageAuthenticity::Signed(keypair.clone()),
-                    Config::default(),
-                )
-                .expect("Gossipsub initiation fails");
+            let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)
+                .expect("mDNS initiation fails");
 
-            PeerBehavior {
-                kademlia,
-                gossipsub,
-            }
+            PeerBehavior { kademlia, mdns }
         })?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
 
-    let topic = gossipsub::IdentTopic::new("peer-network");
-    swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
+    // Roles to transition
+    match args.role {
+        peer_node::cli::Role::BootstapNode => {
+            swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server))
+        }
+        peer_node::cli::Role::Sender => swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Client)),
+    }
 
     swarm.listen_on(peer_multi_addr)?;
 
-    let bootstrap_peer_id: Option<PeerId> = if let Some(bootstrap_peer_id) = args.bootstrap_peer_id
+    let _bootstrap_peer_id: Option<PeerId> = if let Some(bootstrap_peer_id) = args.bootstrap_peer_id
     {
         Some(bootstrap_peer_id.parse()?)
     } else {
         None
     };
 
-    let bootstrap_peer_mutli_address: Option<Multiaddr> =
+    let _bootstrap_peer_mutli_address: Option<Multiaddr> =
         if let Some(peer_mutli_address) = args.peer_mutli_address {
             Some(peer_mutli_address.parse()?)
         } else {
             None
         };
 
-    event_runner(
-        swarm,
-        args.role,
-        bootstrap_peer_mutli_address,
-        bootstrap_peer_id,
-        Topic(topic.to_string()),
-    )
-    .await
+    event_runner(swarm).await
 }

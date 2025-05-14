@@ -1,12 +1,8 @@
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{gossipsub, kad};
+use libp2p::{kad, mdns};
 
 #[derive(NetworkBehaviour)]
 pub struct PeerBehavior {
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
-    pub gossipsub: gossipsub::Behaviour,
-}
-
-pub struct PeerDht {
-    pub kademlia: kad::PeerRecord,
+    pub mdns: mdns::tokio::Behaviour,
 }
