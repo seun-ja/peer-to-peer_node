@@ -72,30 +72,38 @@ pub async fn event_runner(mut swarm: Swarm<PeerBehavior>) -> Result<(), Box<dyn 
                                     ..
                                 })
                             )) => {
-                                tracing::info!(
-                                    "Got record {:?} {:?}",
-                                    std::str::from_utf8(key.as_ref())?,
-                                    std::str::from_utf8(&value)?, // TODO: #10 `BUG` error handling would break program
-                                );
+                                if let Ok(value) = std::str::from_utf8(&value) {
+                                    if let Ok(key) = std::str::from_utf8(key.as_ref()) {
+                                        tracing::info!(
+                                            "Got record {:?} with key {:?}",
+                                            value,
+                                            key
+                                        )
+                                    }
+                                };
                             }
                             kad::QueryResult::GetRecord(Ok(_)) => {}
                             kad::QueryResult::GetRecord(Err(err)) => {
                                 tracing::info!("Failed to get record: {err:?}");
                             }
                             kad::QueryResult::PutRecord(Ok(kad::PutRecordOk { key })) => {
-                                tracing::info!(
-                                    "Successfully put record {:?}",
-                                    std::str::from_utf8(key.as_ref())?
-                                );
+                                if let Ok(key) = std::str::from_utf8(key.as_ref()) {
+                                    tracing::info!(
+                                        "Successfully put record {:?}",
+                                        key
+                                    )
+                                }
                             }
                             kad::QueryResult::PutRecord(Err(err)) => {
                                 tracing::info!("Failed to put record: {err:?}");
                             }
                             kad::QueryResult::StartProviding(Ok(kad::AddProviderOk { key })) => {
-                                tracing::info!(
-                                    "Successfully put provider record {:?}",
-                                    std::str::from_utf8(key.as_ref())?
-                                );
+                                if let Ok(key) = std::str::from_utf8(key.as_ref()) {
+                                    tracing::info!(
+                                        "Successfully put provider record {:?}",
+                                        key
+                                    )
+                                }
                             }
                             kad::QueryResult::StartProviding(Err(err)) => {
                                 eprintln!("Failed to put provider record: {err:?}");
